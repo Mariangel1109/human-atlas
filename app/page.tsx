@@ -1,47 +1,139 @@
-import {flushSync} from 'react-dom';
-import {registerAtlasTools} from './agent-tools';
 import {useEffect,useMemo,useRef,useState} from 'react';
-import {Activity,ArrowUpRight,ChevronRight,Focus,Info,Layers3,Pause,RotateCcw,RotateCw,Search,X} from 'lucide-react';
+import {Activity,Focus,Pause,RotateCcw,RotateCw,Search} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {Badge} from '@/components/ui/badge';
-import {Slider} from '@/components/ui/slider';
-import {Switch} from '@/components/ui/switch';
-import {Sheet,SheetContent,SheetTitle,SheetDescription} from '@/components/ui/sheet';
-import {Combobox,ComboboxInput,ComboboxContent,ComboboxList,ComboboxItem,ComboboxEmpty} from '@/components/ui/combobox';
+import {Sheet,SheetContent,SheetDescription,SheetTitle} from '@/components/ui/sheet';
 import AnatomyScene from './scene';
-import {DEFAULT_VISIBLE,SYSTEMS,EXPLANATIONS,explanation,type Atlas,type Concept,type SceneState,type SystemId,type View} from './anatomy';
+import {DEFAULT_VISIBLE,explanation,SYSTEMS,type Atlas,type Concept,type SceneState,type View} from './anatomy';
+
 const initial:SceneState={explode:0,visible:DEFAULT_VISIBLE,selected:[],isolate:false,view:'three-quarter',rotate:false,reset:0};
+
+type Mode='actual'|'target';
+
+const liverVli={
+ current:52,
+ target:86,
+ currentAge:57,
+ targetAge:51,
+ status:'Compromiso hepático moderado',
+ findings:['Hígado graso grado 2','AST 50 U/L','ALT 45 U/L','Triglicéridos 190 mg/dL'],
+ goals:['Reducir esteatosis hepática','Normalizar enzimas hepáticas','Mejorar perfil metabólico','Disminuir triglicéridos y adiposidad visceral'],
+};
+
 export default function Home(){
  const detailTitle=useRef<HTMLHeadingElement>(null);
- const [atlas,setAtlas]=useState<Atlas|null>(null),[state,setState]=useState(initial),[progress,setProgress]=useState(0),[error,setError]=useState(''),[panel,setPanel]=useState<'layers'|'search'|null>(null),[details,setDetails]=useState(false),[about,setAbout]=useState(false),[query,setQuery]=useState(''),[chosen,setChosen]=useState<Concept|null>(null);
- useEffect(()=>{const abort=new AbortController();setProgress(0);setError('');setAtlas(null);setChosen(null);setDetails(false);setState({...initial,visible:DEFAULT_VISIBLE});fetch('/models/atlas.json',{signal:abort.signal}).then(r=>{if(!r.ok)throw new Error('No se pudo cargar el atlas anatómico.');return r.json();}).then(data=>setAtlas(data as Atlas)).catch(e=>{if(e.name!=='AbortError')setError(e.message);});return()=>abort.abort();},[]);
- useEffect(()=>{const key=(e:KeyboardEvent)=>{if(e.key==='/'&&!(e.target instanceof HTMLInputElement)&&!(e.target instanceof HTMLTextAreaElement)){e.preventDefault();setPanel('search');setDetails(false);}};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);},[]);
- const parts=useMemo(()=>new Map(atlas?.parts.map(p=>[p.id,p])),[atlas]);
- const counts=useMemo(()=>Object.fromEntries(SYSTEMS.map(s=>[s.id,atlas?.parts.filter(p=>p.system===s.id).length??0])),[atlas]);
- const activeSystems=SYSTEMS.filter(s=>counts[s.id]>0);
- const selectedParts=state.selected.map(id=>parts.get(id)).filter(p=>!!p),selected=selectedParts[0],system=SYSTEMS.find(s=>s.id===selected?.system);
- const visibleCount=atlas?.parts.filter(p=>state.isolate?state.selected.includes(p.id):state.visible.includes(p.system)||state.selected.includes(p.id)).length??0;
- const results=useMemo(()=>{if(!atlas)return[];const term=query.toLowerCase().trim();if(!term)return ['heart','brain','liver','pancreas','kidney'].map(name=>atlas.concepts.find(c=>c.name.toLowerCase()===name)).filter((x):x is Concept=>!!x);return atlas.concepts.filter(c=>c.name.toLowerCase().includes(term)||c.id.toLowerCase().includes(term)).sort((a,b)=>a.name.length-b.name.length).slice(0,80);},[atlas,query]);
- const choose=(c:Concept)=>{setChosen(c);setState(s=>({...s,selected:c.elements,isolate:false,rotate:false}));setDetails(true);setPanel(null);};
- useEffect(()=>{if(!atlas)return;return registerAtlasTools(atlas,c=>flushSync(()=>choose(c)));},[atlas]);
- const choosePart=(id:string)=>{const p=parts.get(id);if(!p)return;setChosen({id:p.conceptId,name:p.name,elements:[id]});setState(s=>({...s,selected:[id],isolate:false,rotate:false}));setDetails(true);setPanel(null);};
- const toggle=(id:SystemId)=>{setDetails(false);setState(s=>({...s,selected:[],isolate:false,visible:s.visible.includes(id)?s.visible.filter(x=>x!==id):[...s.visible,id]}));};
- const reset=()=>{setState(s=>({...initial,visible:DEFAULT_VISIBLE,reset:s.reset+1}));setChosen(null);setDetails(false);setPanel(null);};
- const openPanel=(next:'layers'|'search')=>{setDetails(false);setPanel(p=>p===next?null:next);};
+ const [atlas,setAtlas]=useState<Atlas|null>(null);
+ const [state,setState]=useState<SceneState>(initial);
+ const [progress,setProgress]=useState(0);
+ const [error,setError]=useState('');
+ const [chosen,setChosen]=useState<Concept|null>(null);
+ const [details,setDetails]=useState(false);
+ const [mode,setMode]=useState<Mode>('actual');
+
+ useEffect(()=>{
+  const abort=new AbortController();
+  fetch('/models/atlas.json',{signal:abort.signal})
+   .then(r=>{if(!r.ok)throw new Error('No se pudo cargar el atlas anatómico.');return r.json();})
+   .then(data=>setAtlas(data as Atlas))
+   .catch(e=>{if(e.name!=='AbortError')setError(e.message);});
+  return()=>abort.abort();
+ },[]);
+
+ const parts=useMemo(()=>new Map(atlas?.parts.map(p=>[p.id,p])??[]),[atlas]);
+ const selectedParts=state.selected.map(id=>parts.get(id)).filter(p=>!!p);
+ const selected=selectedParts[0];
+ const system=SYSTEMS.find(s=>s.id===selected?.system);
+
+ const findLiver=()=>atlas?.concepts.find(c=>c.name.toLowerCase()==='liver')??atlas?.concepts.find(c=>c.name.toLowerCase().includes('liver'))??null;
+ const openConcept=(c:Concept,isolate=false)=>{setChosen(c);setMode('actual');setState(s=>({...s,selected:c.elements,isolate,explode:0,rotate:false,reset:s.reset+1}));setDetails(true);};
+ const openLiver=()=>{const liver=findLiver();if(liver)openConcept(liver,true);};
+
+ const choosePart=(id:string)=>{
+  const p=parts.get(id);if(!p||!atlas)return;
+  const lower=p.name.toLowerCase();
+  if(lower.includes('liver')){openLiver();return;}
+  const concept=atlas.concepts.find(c=>c.id===p.conceptId)??atlas.concepts.find(c=>c.elements.includes(id));
+  if(concept)openConcept(concept,false);
+ };
+
+ const reset=()=>{setState(s=>({...initial,visible:DEFAULT_VISIBLE,reset:s.reset+1}));setChosen(null);setDetails(false);setMode('actual');};
+ const isLiver=chosen?.name.toLowerCase().includes('liver')??false;
+ const score=mode==='actual'?liverVli.current:liverVli.target;
+ const age=mode==='actual'?liverVli.currentAge:liverVli.targetAge;
+ const accent=mode==='actual'?'#f59e0b':'#22c55e';
+
  return <main className="studio">
   {atlas&&<AnatomyScene atlas={atlas} state={{...state,inspectorOpen:details&&selectedParts.length>0}} onSelect={choosePart} onProgress={n=>{setProgress(n);if(n===100)setError('');}} onError={setError}/>}
   <div className="vignette"/>
-  <header className="identity"><div className="eyebrow"><span className="status-dot"/> VLI™ · DIGITAL TWIN</div><h1>Gemelo Biológico Clínico<Badge variant="outline" className="edition">3D</Badge></h1><div className="identity-meta">Medicina de precisión <span>·</span> Anatomía interactiva VLI™</div></header>
-  <nav className="top-actions" aria-label="Paneles"><Button variant="ghost" className={panel==='search'?'active':''} onClick={()=>openPanel('search')} aria-label="Buscar anatomía"><Search size={18}/><span>Buscar órgano</span><kbd>/</kbd></Button><Button variant="ghost" className="icon-button" aria-label="Acerca de este atlas" onClick={()=>{setDetails(false);setPanel(null);setAbout(true);}}><Info size={18}/></Button></nav>
-  <section className={`layers-panel glass ${panel==='layers'?'mobile-open':''}`} aria-label="Capas anatómicas"><div className="panel-heading"><span>Sistemas</span><Button variant="ghost" className="mobile-only icon-button" onClick={()=>setPanel(null)} aria-label="Cerrar"><X size={18}/></Button><Badge variant="secondary" className="desktop-only small-number">{activeSystems.length}</Badge></div><div className="layer-presets"><Button variant="ghost" onClick={()=>setState(s=>({...s,selected:[],isolate:false,visible:activeSystems.map(x=>x.id)}))}>Todos</Button><Button variant="ghost" onClick={()=>setState(s=>({...s,selected:[],isolate:false,visible:['skeletal']}))}>Esqueleto</Button><Button variant="ghost" onClick={()=>setState(s=>({...s,selected:[],isolate:false,visible:['cardiac','respiratory','digestive','urinary','endocrine','reproductive']}))}>Órganos</Button></div><div className="system-list">{activeSystems.map(s=><div className={`system-row ${state.visible.includes(s.id)?'enabled':''}`} key={s.id}><Button variant="ghost" className="system-name" onClick={()=>setState(v=>({...v,visible:[s.id],isolate:false,selected:[]}))}><span className="system-dot" style={{background:s.color}}/>{s.name}<span className="system-count">{counts[s.id]}</span></Button><Switch checked={state.visible.includes(s.id)} onCheckedChange={()=>toggle(s.id)} /></div>)}</div><div className="panel-foot"><span>{visibleCount.toLocaleString()} estructuras visibles</span><Button variant="ghost" onClick={()=>setState(s=>({...s,visible:[],selected:[],isolate:false}))}>Ocultar</Button></div></section>
-  {panel==='search'&&<section className="search-panel glass"><div className="panel-heading"><span>Buscar estructura</span><Button variant="ghost" className="icon-button" onClick={()=>setPanel(null)}><X size={18}/></Button></div><Combobox<Concept> items={results} value={null} onValueChange={value=>{if(value)choose(value);}} inputValue={query} onInputValueChange={setQuery} itemToStringLabel={c=>c.name} filter={null} open onOpenChange={open=>{if(!open)setPanel(null);}}><ComboboxInput autoFocus placeholder="Heart, liver, brain, kidney…" showTrigger={false}/><ComboboxContent className="anatomy-search-results"><ComboboxEmpty>Sin resultados.</ComboboxEmpty><ComboboxList>{(c:Concept)=><ComboboxItem key={c.id} value={c}><span className="search-result-name">{c.name}</span><span className="small-number">{c.elements.length}</span></ComboboxItem>}</ComboboxList></ComboboxContent></Combobox><p className="search-note">Seleccione una estructura para explorarla en 3D.</p></section>}
-  <nav className="view-controls glass">{(['three-quarter','front','side','back'] as View[]).map((v,i)=><Button variant="ghost" key={v} className={state.view===v?'active':''} onClick={()=>setState(s=>({...s,view:v,reset:s.reset+1,rotate:false}))}><span>{['¾','F','S','B'][i]}</span></Button>)}<i/><Button variant="ghost" className={state.rotate?'active':''} onClick={()=>setState(s=>({...s,rotate:!s.rotate}))}>{state.rotate?<Pause size={17}/>:<RotateCw size={18}/>}</Button><Button variant="ghost" onClick={reset}><RotateCcw size={17}/></Button></nav>
-  <div className="scene-caption"><span className="caption-line"/><span>{state.isolate?(chosen?.name??'ÓRGANO SELECCIONADO'):'GEMELO BIOLÓGICO · VLI™'}</span><span className="caption-line"/></div>
-  <div className="bottom-dock glass"><Button variant="ghost" className="mobile-only dock-layers" onClick={()=>openPanel('layers')}><Layers3 size={20}/><span>Sistemas</span></Button><div className="explode-control"><div className="explode-label"><label id="explode-label">Anatomía explosiva</label><output>{Math.round(state.explode*100)}<span>%</span></output></div><Slider aria-labelledby="explode-label" min={0} max={100} step={1} value={[state.explode*100]} onValueChange={v=>setState(s=>({...s,explode:(Array.isArray(v)?v[0]:v)/100,rotate:false}))}/><div className="slider-endpoints"><span>Ensamblado</span><span>Cada pieza</span></div></div><Button variant="ghost" className="dock-reset" onClick={reset}><RotateCcw size={18}/><span>Reiniciar</span></Button></div>
-  <footer className="studio-footer"><span>Arrastra para rotar <b>·</b> Zoom <b>·</b> Toca para inspeccionar</span><Button variant="ghost" onClick={()=>setAbout(true)}>Fuente y créditos <ArrowUpRight size={12}/></Button></footer>
+
+  <header className="identity">
+   <div className="eyebrow"><span className="status-dot"/> VLI™ · DIGITAL TWIN</div>
+   <h1>Gemelo Biológico Clínico <Badge variant="outline" className="edition">3D</Badge></h1>
+   <div className="identity-meta">Paciente demo VLI-0001 <span>·</span> Estado actual → objetivo</div>
+  </header>
+
+  <div className="top-actions" style={{display:'flex',gap:8}}>
+   <Button variant="ghost" onClick={openLiver}><Search size={18}/><span>Hígado VLI</span></Button>
+   <Button variant="ghost" onClick={()=>setState(s=>({...s,rotate:!s.rotate,isolate:false}))}>{state.rotate?<Pause size={18}/>:<RotateCw size={18}/>}<span>{state.rotate?'Pausar':'Rotar 360°'}</span></Button>
+  </div>
+
+  <nav className="view-controls glass" aria-label="Vistas 3D">
+   {(['three-quarter','front','side','back'] as View[]).map((v,i)=><Button variant="ghost" key={v} className={state.view===v?'active':''} onClick={()=>setState(s=>({...s,view:v,reset:s.reset+1,rotate:false}))}><span>{['¾','F','S','B'][i]}</span></Button>)}
+   <i/>
+   <Button variant="ghost" onClick={reset}><RotateCcw size={17}/></Button>
+  </nav>
+
+  <div className="scene-caption"><span className="caption-line"/><span>{state.isolate?(chosen?.name??'ÓRGANO SELECCIONADO'):'TOQUE UN ÓRGANO PARA EXPLORARLO'}</span><span className="caption-line"/></div>
+
+  <div className="bottom-dock glass" style={{padding:'10px 14px',gap:10}}>
+   <div style={{display:'flex',alignItems:'center',gap:10,minWidth:0}}><span style={{fontSize:11,letterSpacing:'.14em',fontWeight:800}}>VLI™</span><span style={{fontSize:12,opacity:.72}}>Actual</span><strong style={{fontSize:22}}>61</strong><span style={{opacity:.45}}>→</span><span style={{fontSize:12,opacity:.72}}>Objetivo</span><strong style={{fontSize:22}}>85</strong></div>
+   <Button variant="ghost" onClick={openLiver}>Explorar hígado</Button>
+  </div>
+
+  <footer className="studio-footer"><span>Arrastra para rotar <b>·</b> Pellizca para zoom <b>·</b> Toca para inspeccionar</span><span>BodyParts3D · CC BY 4.0</span></footer>
+
   {progress<100&&!error&&<div className="loading glass" role="status"><Activity size={18}/><div><strong>Preparando gemelo VLI™</strong><span>{progress}%</span><div className="loading-track"><i style={{width:`${progress}%`}}/></div></div></div>}
   {error&&<div className="loading glass error"><p>{error}</p><Button variant="ghost" onClick={()=>location.reload()}>Recargar</Button></div>}
-  <Sheet open={details&&selectedParts.length>0} modal={false} disablePointerDismissal onOpenChange={setDetails}><SheetContent initialFocus={detailTitle} className={`detail-sheet glass ${state.isolate?'is-isolated':''}`} showCloseButton={true}><div className="detail-header"><div className="detail-accent" style={{background:system?.color}}/><div className="eyebrow">ÓRGANO VLI™ · {system?.name??'ANATOMÍA'}</div><SheetTitle ref={detailTitle} tabIndex={-1} className="structure-title">{chosen?.name}</SheetTitle></div><div className="detail-scroll"><SheetDescription className="structure-description">{chosen&&selected?explanation(chosen.name,selected.system):''}</SheetDescription><div className="structure-meta"><span>Estado actual<strong>Evaluación VLI pendiente</strong></span><span>Estado objetivo<strong>Personalizado</strong></span></div><p className="context-note">VLI™ integrará biomarcadores, imagen, composición corporal y variables funcionales. Los puntajes biológicos se mostrarán cuando el algoritmo clínico esté definido y validado.</p></div><div className="detail-actions"><Button className={`primary-action ${state.isolate?'active':''}`} onClick={()=>setState(s=>({...s,isolate:!s.isolate,explode:0}))}><Focus size={18}/>{state.isolate?'Ver cuerpo completo':'Aislar órgano'}<ChevronRight size={16}/></Button><Button variant="ghost" className="secondary-action" onClick={()=>{setState(s=>({...s,selected:[],isolate:false}));setDetails(false);}}>Cerrar</Button></div></SheetContent></Sheet>
-  <Sheet open={about} onOpenChange={setAbout}><SheetContent className="about-sheet glass"><div className="eyebrow">VLI™ · FUENTE ANATÓMICA</div><SheetTitle className="structure-title">Gemelo Biológico Clínico</SheetTitle><SheetDescription>Prototipo interactivo VLI™ basado en anatomía BodyParts3D.</SheetDescription><div className="about-copy"><p>La anatomía se utiliza como interfaz educativa e interactiva. VLI™ añadirá la capa clínica individual del paciente.</p><p>Los resultados VLI no sustituyen la valoración médica y los puntajes biológicos del prototipo no deben interpretarse como un algoritmo validado.</p><h3>Fuente anatómica</h3><p>BodyParts3D, © The Database Center for Life Science, licencia CC Attribution 4.0 International.</p><a href="https://dbarchive.biosciencedbc.jp/en/bodyparts3d/lic.html" target="_blank" rel="noreferrer">Licencia <ArrowUpRight size={14}/></a></div></SheetContent></Sheet>
+
+  <Sheet open={details&&selectedParts.length>0} modal={false} disablePointerDismissal onOpenChange={setDetails}>
+   <SheetContent initialFocus={detailTitle} className={`detail-sheet glass ${state.isolate?'is-isolated':''}`} showCloseButton={true}>
+    <div className="detail-header">
+     <div className="detail-accent" style={{background:isLiver?accent:system?.color}}/>
+     <div className="eyebrow">{isLiver?'VLI™ · RELOJ HEPÁTICO':system?.name??'ANATOMÍA'}</div>
+     <SheetTitle ref={detailTitle} tabIndex={-1} className="structure-title">{isLiver?'Hígado':chosen?.name}</SheetTitle>
+    </div>
+
+    <div className="detail-scroll">
+     {isLiver?<>
+      <div style={{display:'flex',gap:8,margin:'0 0 16px'}}>
+       <Button onClick={()=>setMode('actual')} variant={mode==='actual'?'default':'ghost'} style={{flex:1}}>ESTADO ACTUAL</Button>
+       <Button onClick={()=>setMode('target')} variant={mode==='target'?'default':'ghost'} style={{flex:1}}>ESTADO OBJETIVO</Button>
+      </div>
+
+      <div style={{border:'1px solid rgba(255,255,255,.12)',borderRadius:18,padding:16,background:'rgba(255,255,255,.035)'}}>
+       <div style={{display:'flex',justifyContent:'space-between',alignItems:'end',gap:12}}>
+        <div><div style={{fontSize:11,letterSpacing:'.12em',opacity:.65}}>PUNTAJE HEPÁTICO VLI™</div><div style={{fontSize:46,fontWeight:900,lineHeight:1,color:accent}}>{score}<span style={{fontSize:16,opacity:.6}}>/100</span></div></div>
+        <div style={{textAlign:'right'}}><div style={{fontSize:11,opacity:.65}}>Edad biológica hepática*</div><div style={{fontSize:26,fontWeight:800}}>{age} años</div></div>
+       </div>
+       <div style={{height:9,borderRadius:99,background:'rgba(255,255,255,.10)',marginTop:14,overflow:'hidden'}}><div style={{height:'100%',width:`${score}%`,background:accent,transition:'all .35s ease'}}/></div>
+      </div>
+
+      <div style={{marginTop:18}}><div className="eyebrow">{mode==='actual'?'QUÉ ESTÁ PASANDO HOY':'A DÓNDE QUEREMOS LLEGAR'}</div><div style={{display:'grid',gap:8,marginTop:9}}>{(mode==='actual'?liverVli.findings:liverVli.goals).map(item=><div key={item} style={{display:'flex',gap:9,padding:'10px 12px',borderRadius:12,background:'rgba(255,255,255,.04)',fontSize:13}}><span style={{color:accent}}>●</span><span>{item}</span></div>)}</div></div>
+
+      <div style={{marginTop:18,padding:13,borderRadius:14,border:`1px solid ${accent}55`,background:`${accent}10`}}><div style={{fontSize:11,letterSpacing:'.11em',fontWeight:800,color:accent}}>{mode==='actual'?'ESTADO ACTUAL':'ESTADO BIOLÓGICO OBJETIVO'}</div><div style={{marginTop:5,fontWeight:800}}>{mode==='actual'?liverVli.status:'Perfil hepático-metabólico mejorado'}</div><div style={{marginTop:4,fontSize:12,opacity:.72}}>Actual {liverVli.current}/100 → Objetivo {liverVli.target}/100</div></div>
+
+      <p className="context-note" style={{marginTop:16}}>*Los puntajes y edades biológicas de esta demo son ilustrativos. VLI™ todavía requiere definición y validación científica antes de uso clínico como índice validado.</p>
+     </>:<>
+      <SheetDescription className="structure-description">{chosen&&selected?explanation(chosen.name,selected.system):''}</SheetDescription>
+      <p className="context-note">Esta estructura todavía no tiene un reloj VLI configurado. La primera versión funcional está activa para hígado.</p>
+     </>}
+    </div>
+
+    <div className="detail-actions">
+     <Button className={`primary-action ${state.isolate?'active':''}`} onClick={()=>setState(s=>({...s,isolate:!s.isolate,explode:0,reset:s.reset+1}))}><Focus size={18}/>{state.isolate?'Ver cuerpo completo':'Aislar órgano'}</Button>
+     {isLiver&&<Button variant="ghost" className="secondary-action" onClick={()=>setMode(mode==='actual'?'target':'actual')}>Cambiar a {mode==='actual'?'objetivo':'actual'}</Button>}
+    </div>
+   </SheetContent>
+  </Sheet>
  </main>;
 }
