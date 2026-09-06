@@ -12,13 +12,30 @@ create table if not exists public.consultations (
   age numeric,
   weight numeric,
   waist numeric,
+  body_fat_pct numeric,
+  visceral_fat numeric,
+  muscle_mass_pct numeric,
+  grip_strength numeric,
+  vo2_est numeric,
+  hrv numeric,
+  sleep_hours numeric,
+  activity_minutes_week numeric,
   hba1c numeric,
+  fasting_glucose numeric,
+  fasting_insulin numeric,
   ldl numeric,
+  hdl numeric,
   triglycerides numeric,
+  apob numeric,
+  lpa numeric,
+  hs_crp numeric,
   ast numeric,
   alt numeric,
+  ggt numeric,
+  liver_fat_grade numeric,
   systolic_bp numeric,
   diastolic_bp numeric,
+  carotid_plaque numeric,
   notes text,
   vli_global numeric,
   vli_completeness numeric,
@@ -26,6 +43,23 @@ create table if not exists public.consultations (
   vli_components jsonb
 );
 
+alter table public.consultations add column if not exists body_fat_pct numeric;
+alter table public.consultations add column if not exists visceral_fat numeric;
+alter table public.consultations add column if not exists muscle_mass_pct numeric;
+alter table public.consultations add column if not exists grip_strength numeric;
+alter table public.consultations add column if not exists vo2_est numeric;
+alter table public.consultations add column if not exists hrv numeric;
+alter table public.consultations add column if not exists sleep_hours numeric;
+alter table public.consultations add column if not exists activity_minutes_week numeric;
+alter table public.consultations add column if not exists fasting_glucose numeric;
+alter table public.consultations add column if not exists fasting_insulin numeric;
+alter table public.consultations add column if not exists hdl numeric;
+alter table public.consultations add column if not exists apob numeric;
+alter table public.consultations add column if not exists lpa numeric;
+alter table public.consultations add column if not exists hs_crp numeric;
+alter table public.consultations add column if not exists ggt numeric;
+alter table public.consultations add column if not exists liver_fat_grade numeric;
+alter table public.consultations add column if not exists carotid_plaque numeric;
 alter table public.consultations add column if not exists vli_completeness numeric;
 alter table public.consultations add column if not exists vli_version text;
 alter table public.consultations add column if not exists vli_components jsonb;
