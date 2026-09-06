@@ -2,7 +2,14 @@ import {calculateVli,type OrganResult} from './vli-core';
 import {downloadVliPassport} from './vli-passport';
 
 export type VliPatient={id:string;sex?:string;birth_date?:string;created_at?:string};
-export type VliConsultation={id?:string;patient_id:string;created_at?:string;age?:number;weight?:number;waist?:number;hba1c?:number;ldl?:number;triglycerides?:number;ast?:number;alt?:number;systolic_bp?:number;diastolic_bp?:number;notes?:string;vli_global?:number|null;vli_completeness?:number|null;vli_version?:string|null;vli_components?:Record<string,OrganResult>|null};
+export type VliConsultation={
+ id?:string;patient_id:string;created_at?:string;
+ age?:number;weight?:number;waist?:number;body_fat_pct?:number;visceral_fat?:number;muscle_mass_pct?:number;
+ grip_strength?:number;vo2_est?:number;hrv?:number;sleep_hours?:number;activity_minutes_week?:number;
+ hba1c?:number;fasting_glucose?:number;fasting_insulin?:number;ldl?:number;hdl?:number;triglycerides?:number;apob?:number;lpa?:number;hs_crp?:number;
+ ast?:number;alt?:number;ggt?:number;liver_fat_grade?:number;systolic_bp?:number;diastolic_bp?:number;carotid_plaque?:number;
+ notes?:string;vli_global?:number|null;vli_completeness?:number|null;vli_version?:string|null;vli_components?:Record<string,OrganResult>|null;
+};
 
 const url=(import.meta as any).env?.VITE_SUPABASE_URL as string|undefined;
 const key=(import.meta as any).env?.VITE_SUPABASE_ANON_KEY as string|undefined;
