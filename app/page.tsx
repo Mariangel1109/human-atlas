@@ -1,83 +1,47 @@
-import {useEffect,useMemo,useRef,useState} from 'react';
-import {Activity,Focus,Pause,RotateCcw,RotateCw} from 'lucide-react';
-import {Button} from '@/components/ui/button';
-import {Badge} from '@/components/ui/badge';
-import {Sheet,SheetContent,SheetDescription,SheetTitle} from '@/components/ui/sheet';
-import AnatomyScene from './scene';
-import {DEFAULT_VISIBLE,explanation,SYSTEMS,type Atlas,type Concept,type SceneState,type View} from './anatomy';
+import {useState} from 'react';
+import {Activity,Brain,FileText,HeartPulse,LayoutDashboard,Plus,Search,Target,UserRound,Users} from 'lucide-react';
 
-const initial:SceneState={explode:0,visible:DEFAULT_VISIBLE,selected:[],isolate:false,view:'front',rotate:false,reset:0};
-type Mode='actual'|'target';
+type Tab='dashboard'|'patients'|'consult'|'twin'|'reports';
 
-const liverVli={
- current:52,target:86,currentAge:57,targetAge:51,status:'Compromiso hepático moderado',
- findings:['Hígado graso grado 2','AST 50 U/L','ALT 45 U/L','Triglicéridos 190 mg/dL'],
- goals:['Reducir esteatosis hepática','Normalizar enzimas hepáticas','Mejorar perfil metabólico','Disminuir triglicéridos y adiposidad visceral'],
-};
-
-const organMenu=[
- {label:'Vista general',query:''},{label:'Cerebro',query:'brain'},{label:'Corazón',query:'heart'},{label:'Hígado',query:'liver'},{label:'Páncreas',query:'pancreas'},{label:'Riñones',query:'kidney'},{label:'Músculo',query:'muscle'}
+const organs=[
+ {name:'Corazón',score:68,age:58,status:'Riesgo alto'},
+ {name:'Metabolismo',score:58,age:60,status:'Riesgo alto'},
+ {name:'Hígado',score:52,age:57,status:'Compromiso moderado'},
+ {name:'Músculo',score:70,age:52,status:'Datos incompletos'},
+ {name:'Cerebro',score:72,age:50,status:'Estimación indirecta'},
 ];
 
 export default function Home(){
- const detailTitle=useRef<HTMLHeadingElement>(null);
- const [atlas,setAtlas]=useState<Atlas|null>(null),[state,setState]=useState<SceneState>(initial),[progress,setProgress]=useState(0),[error,setError]=useState(''),[chosen,setChosen]=useState<Concept|null>(null),[details,setDetails]=useState(false),[mode,setMode]=useState<Mode>('actual');
-
- useEffect(()=>{const abort=new AbortController();fetch('/models/atlas.json',{signal:abort.signal}).then(r=>{if(!r.ok)throw new Error('No se pudo cargar el atlas anatómico.');return r.json();}).then(data=>setAtlas(data as Atlas)).catch(e=>{if(e.name!=='AbortError')setError(e.message);});return()=>abort.abort();},[]);
-
- const parts=useMemo(()=>new Map(atlas?.parts.map(p=>[p.id,p])??[]),[atlas]);
- const selectedParts=state.selected.map(id=>parts.get(id)).filter(p=>!!p),selected=selectedParts[0],system=SYSTEMS.find(s=>s.id===selected?.system);
- const findConcept=(query:string)=>atlas?.concepts.find(c=>c.name.toLowerCase()===query)??atlas?.concepts.find(c=>c.name.toLowerCase().includes(query))??null;
- const openConcept=(c:Concept,openPanel=true)=>{setChosen(c);setMode('actual');setState(s=>({...s,selected:c.elements,isolate:false,explode:0,rotate:false,reset:s.reset+1}));setDetails(openPanel);};
- const openOrgan=(query:string)=>{if(!query){reset();return;}const c=findConcept(query);if(c)openConcept(c,true);};
- const openLiver=()=>openOrgan('liver');
- const choosePart=(id:string)=>{const p=parts.get(id);if(!p||!atlas)return;const lower=p.name.toLowerCase();if(lower.includes('liver')){openLiver();return;}const concept=atlas.concepts.find(c=>c.id===p.conceptId)??atlas.concepts.find(c=>c.elements.includes(id));if(concept)openConcept(concept,true);};
- const reset=()=>{setState(s=>({...initial,visible:DEFAULT_VISIBLE,reset:s.reset+1}));setChosen(null);setDetails(false);setMode('actual');};
- const isLiver=chosen?.name.toLowerCase().includes('liver')??false;
- const score=mode==='actual'?liverVli.current:liverVli.target,age=mode==='actual'?liverVli.currentAge:liverVli.targetAge,accent=mode==='actual'?'#ff922e':'#36f29a';
- const rotateSelected=()=>{if(!chosen)return;setState(s=>({...s,isolate:true,rotate:!s.rotate,explode:0,reset:s.reset+1}));};
- const showBody=()=>setState(s=>({...s,isolate:false,rotate:false,reset:s.reset+1}));
-
- return <main className="studio vli-studio">
+ const [tab,setTab]=useState<Tab>('dashboard');
+ const [patient,setPatient]=useState('VLI-0001');
+ const tabs:[Tab,string,any][]=[['dashboard','Resumen',LayoutDashboard],['patients','Pacientes',Users],['consult','Nueva consulta',Plus],['twin','Gemelo clínico',Activity],['reports','Informes',FileText]];
+ return <main className="app">
   <style>{`
-   .vli-studio{background:#020b14;color:#effcff;overflow:hidden}.vli-studio .scene{inset:0 360px 0 190px!important}.vli-studio .identity{left:24px;top:18px;z-index:20}.vli-studio .identity h1{color:#effcff;font-size:24px;text-shadow:0 0 24px rgba(66,215,255,.22)}.vli-studio .identity-meta{color:#83b8ca}.vli-studio .eyebrow{color:#67e8f9}.vli-studio .glass{background:rgba(4,20,34,.78)!important;border-color:rgba(78,210,255,.22)!important;backdrop-filter:blur(16px)}.vli-left{position:absolute;z-index:18;left:16px;top:104px;width:160px;display:grid;gap:8px}.vli-left button{justify-content:flex-start;height:48px;border:1px solid rgba(105,218,255,.16);background:rgba(5,28,48,.72);color:#dff8ff;border-radius:12px}.vli-left button.active{border-color:#ff9b37;background:linear-gradient(90deg,rgba(153,73,10,.72),rgba(50,31,20,.65));box-shadow:0 0 24px rgba(255,146,46,.22)}.vli-tools{position:absolute;z-index:18;right:374px;top:31%;display:grid;gap:8px}.vli-tools button{width:66px;height:52px;display:flex;flex-direction:column;gap:2px;background:rgba(4,24,38,.84);border:1px solid rgba(96,219,255,.24);color:#eaffff;border-radius:12px;font-size:11px}.vli-tools button.active{border-color:#43e3ff;box-shadow:0 0 20px rgba(67,227,255,.2)}.vli-status{position:absolute;z-index:18;left:210px;bottom:18px;right:380px;display:flex;justify-content:center;gap:8px}.vli-status button{min-width:104px;background:rgba(4,24,38,.84);border:1px solid rgba(96,219,255,.20);color:#eaffff;border-radius:12px}.vli-status button.active{border-color:#43e3ff;box-shadow:0 0 18px rgba(67,227,255,.18)}.vli-studio .detail-sheet{width:360px!important;max-width:360px!important;background:rgba(3,16,28,.97)!important;color:#effcff!important;border-left:1px solid rgba(84,220,255,.25)!important}.vli-studio .structure-title{color:#effcff!important;font-size:34px!important}.vli-studio .structure-description,.vli-studio .context-note{color:#a9cbd6!important}.vli-studio .detail-actions{background:linear-gradient(180deg,transparent,rgba(3,16,28,.99))}.vli-studio .studio-footer,.vli-studio .scene-caption,.vli-studio .bottom-dock,.vli-studio .view-controls,.vli-studio .top-actions{display:none!important}.vli-studio .status-dot{box-shadow:0 0 18px #31dfff}.vli-logo{font-size:42px;font-weight:900;letter-spacing:-.06em;line-height:1}.vli-sub{font-size:11px;letter-spacing:.16em;color:#8edfff;margin-top:3px}.vli-topnav{position:absolute;z-index:18;top:18px;left:46%;transform:translateX(-50%);display:flex;gap:22px;font-size:12px;color:#9dc7d6}.vli-topnav span:first-child{color:#55e6ff;border-bottom:2px solid #55e6ff;padding-bottom:8px}.vli-badge{position:absolute;z-index:18;left:210px;top:112px;padding:8px 12px;border-radius:12px;background:rgba(5,28,48,.72);border:1px solid rgba(105,218,255,.16);font-size:12px;color:#bdeeff}.vli-badge strong{color:#fff}.vli-studio .loading{z-index:40}.vli-studio .error{z-index:40}@media(max-width:900px){.vli-studio .scene{inset:0!important}.vli-left{display:none}.vli-tools{right:12px;top:150px}.vli-tools button{width:52px;height:48px}.vli-status{left:12px;right:12px;bottom:14px}.vli-topnav{display:none}.vli-badge{left:16px;top:92px}.vli-studio .detail-sheet{width:min(92vw,360px)!important;max-width:min(92vw,360px)!important}}
+  *{box-sizing:border-box}body{margin:0;background:#06111d;color:#edf8fb;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}.app{min-height:100vh;background:radial-gradient(circle at 70% 20%,rgba(20,126,157,.14),transparent 30%),linear-gradient(180deg,#07131f,#050c14)}
+  .shell{display:grid;grid-template-columns:230px 1fr;min-height:100vh}.side{border-right:1px solid rgba(104,199,220,.12);background:rgba(4,13,23,.88);padding:24px 16px;position:sticky;top:0;height:100vh}.logo{font-size:34px;font-weight:900;letter-spacing:-.05em}.sub{font-size:10px;letter-spacing:.16em;color:#70d8ed;margin-top:3px}.nav{display:grid;gap:8px;margin-top:34px}.nav button{display:flex;align-items:center;gap:10px;width:100%;padding:12px 13px;border-radius:12px;border:1px solid transparent;background:transparent;color:#a9c4ce;text-align:left}.nav button.active{color:#fff;background:rgba(31,136,161,.16);border-color:rgba(82,217,240,.24)}.main{padding:24px 30px 40px}.top{display:flex;justify-content:space-between;align-items:center;gap:18px}.title h1{font-size:24px;margin:0}.title p{margin:5px 0 0;color:#7fa6b3;font-size:13px}.search{display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid rgba(119,209,225,.16);background:rgba(255,255,255,.025);border-radius:12px;color:#90b3bf}.search input{background:none;border:0;outline:0;color:#fff;width:150px}.grid{display:grid;gap:16px}.hero{grid-template-columns:1.05fr 1.95fr;margin-top:26px}.card{background:linear-gradient(180deg,rgba(10,30,46,.78),rgba(6,18,29,.78));border:1px solid rgba(112,214,232,.12);border-radius:18px;padding:18px;box-shadow:0 18px 45px rgba(0,0,0,.16)}.score{font-size:64px;font-weight:900;line-height:1;color:#65e7f2;margin-top:14px}.muted{color:#85a9b5;font-size:12px}.pill{display:inline-flex;padding:7px 10px;border-radius:999px;background:rgba(234,131,44,.14);color:#ffb168;font-size:11px;border:1px solid rgba(234,131,44,.25)}.organs{grid-template-columns:repeat(5,1fr);margin-top:16px}.organ{padding:16px}.organ h3{margin:0 0 14px;font-size:14px}.organ .n{font-size:28px;font-weight:800}.organ small{display:block;color:#7fa6b3;margin-top:4px}.bar{height:6px;border-radius:999px;background:#122636;overflow:hidden;margin-top:12px}.bar i{display:block;height:100%;background:linear-gradient(90deg,#e18c45,#5de0e6)}.section{margin-top:22px}.section h2{font-size:16px;margin:0 0 12px}.two{grid-template-columns:1.3fr .7fr}.rows{display:grid;gap:10px}.row{display:flex;justify-content:space-between;gap:20px;padding:12px 0;border-bottom:1px solid rgba(255,255,255,.06)}.row:last-child{border-bottom:0}.cta{display:flex;align-items:center;justify-content:center;min-height:180px;text-align:center}.cta button,.primary{border:0;border-radius:12px;padding:12px 16px;background:linear-gradient(135deg,#27c9df,#1393b8);color:#03121a;font-weight:800}.panel{margin-top:26px}.empty{padding:34px;text-align:center;color:#88a8b3}.empty h2{color:#eefcff}.form{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.field{display:grid;gap:6px}.field label{font-size:11px;color:#7fa6b3}.field input{padding:11px;border-radius:10px;border:1px solid rgba(110,203,221,.16);background:#081622;color:#fff}.twinbox{min-height:420px;display:grid;place-items:center;background:radial-gradient(circle,rgba(38,181,207,.12),transparent 35%),rgba(6,17,28,.7)}.twinplaceholder{width:150px;height:290px;border:1px solid rgba(99,230,245,.35);border-radius:48% 48% 35% 35%;box-shadow:0 0 50px rgba(55,211,235,.08) inset,0 0 35px rgba(55,211,235,.08);display:grid;place-items:center;color:#63dfea;font-size:12px;text-align:center;padding:20px}
+  @media(max-width:900px){.shell{grid-template-columns:1fr}.side{height:auto;position:relative;border-right:0;border-bottom:1px solid rgba(104,199,220,.12)}.nav{grid-template-columns:repeat(5,1fr);overflow:auto}.nav button{justify-content:center;font-size:0}.main{padding:18px}.hero,.two,.organs,.form{grid-template-columns:1fr}.top{align-items:flex-start;flex-direction:column}.search{width:100%}.search input{width:100%}}
   `}</style>
+  <div className="shell">
+   <aside className="side"><div className="logo">VLI™</div><div className="sub">LONGEVITY CLINICAL OS</div><div className="nav">{tabs.map(([id,label,Icon])=><button key={id} className={tab===id?'active':''} onClick={()=>setTab(id)}><Icon size={18}/><span>{label}</span></button>)}</div></aside>
+   <section className="main">
+    <div className="top"><div className="title"><h1>{tab==='dashboard'?'Panel clínico VLI™':tab==='patients'?'Pacientes':tab==='consult'?'Nueva consulta':tab==='twin'?'Gemelo Biológico Clínico':'Informes y Pasaporte VLI™'}</h1><p>Paciente activo: {patient} · Prototipo clínico v1</p></div><div className="search"><Search size={16}/><input value={patient} onChange={e=>setPatient(e.target.value)} aria-label="Paciente"/></div></div>
 
-  {atlas&&<AnatomyScene atlas={atlas} state={{...state,inspectorOpen:details&&selectedParts.length>0}} onSelect={choosePart} onProgress={n=>{setProgress(n);if(n===100)setError('');}} onError={setError} clinicalMode={isLiver?mode:null} clinicalFocus={!!chosen}/>} 
-  <div className="vignette"/>
+    {tab==='dashboard'&&<>
+      <div className="grid hero"><div className="card"><div className="muted">VLI GLOBAL</div><div className="score">61<span style={{fontSize:20,color:'#86a8b3'}}>/100</span></div><div style={{marginTop:12}}><span className="pill">Estado biológico comprometido</span></div><div className="row" style={{marginTop:12}}><span className="muted">Edad cronológica</span><strong>52 años</strong></div><div className="row"><span className="muted">Edad biológica*</span><strong>56 años</strong></div></div><div className="card"><div className="muted">OBJETIVO CLÍNICO</div><h2 style={{fontSize:30,margin:'10px 0 4px'}}>61 → 85</h2><p style={{color:'#9dc0ca',maxWidth:620}}>Mostrar al paciente cómo está hoy, qué variables explican su riesgo y cuál es el estado biológico objetivo definido por metas clínicas individualizadas.</p><div className="row"><span>Prioridad 1</span><strong>Metabolismo + Hígado</strong></div><div className="row"><span>Prioridad 2</span><strong>Riesgo cardiovascular</strong></div><div className="row"><span>Seguimiento</span><strong>Inicial → Actual → Objetivo</strong></div></div></div>
+      <div className="grid organs">{organs.map(o=><div className="card organ" key={o.name}><h3>{o.name}</h3><div className="n">{o.score}</div><small>Edad biológica*: {o.age}</small><small>{o.status}</small><div className="bar"><i style={{width:`${o.score}%`}}/></div></div>)}</div>
+      <div className="section grid two"><div><h2>Hallazgos prioritarios</h2><div className="card rows"><div className="row"><span>LDL</span><strong>180 mg/dL</strong></div><div className="row"><span>Triglicéridos</span><strong>190 mg/dL</strong></div><div className="row"><span>HbA1c</span><strong>5.9%</strong></div><div className="row"><span>Hígado graso</span><strong>Grado 2</strong></div><div className="row"><span>ALT / AST</span><strong>45 / 50 U/L</strong></div></div></div><div><h2>Siguiente acción</h2><div className="card cta"><div><Target size={34}/><h3>Completar consulta VLI</h3><p className="muted">Añadir datos faltantes, calcular versión clínica y generar el plan.</p><button onClick={()=>setTab('consult')}>Abrir consulta</button></div></div></div></div>
+    </>}
 
-  <header className="identity"><div className="vli-logo">VLI™</div><div className="vli-sub">GEMELO BIOLÓGICO CLÍNICO</div><div className="identity-meta">TU SALUD EN 3D</div></header>
-  <div className="vli-topnav"><span>Explorar</span><span>Comparar</span><span>Métricas</span><span>Plan</span><span>Informes</span></div>
-  <div className="vli-badge">Paciente demo <strong>VLI-0001</strong> · Estado actual → objetivo</div>
+    {tab==='patients'&&<div className="panel card"><div className="row"><div><strong>VLI-0001</strong><div className="muted">Paciente demo · seguimiento activo</div></div><span className="pill">61/100</span></div><div className="row"><div><strong>VLI-0002</strong><div className="muted">Nuevo paciente</div></div><span className="muted">Sin consulta</span></div><div style={{marginTop:18}}><button className="primary" onClick={()=>setTab('consult')}><Plus size={16} style={{verticalAlign:'middle',marginRight:6}}/>Nuevo paciente</button></div></div>}
 
-  <aside className="vli-left">{organMenu.map(item=><Button key={item.label} variant="ghost" className={(item.query&&chosen?.name.toLowerCase().includes(item.query))||(!item.query&&!chosen)?'active':''} onClick={()=>openOrgan(item.query)}>{item.label}</Button>)}</aside>
+    {tab==='consult'&&<div className="panel"><div className="card"><h2>Captura clínica VLI</h2><p className="muted">MVP: datos clínicos, laboratorio, composición corporal e imagen. Los campos no disponibles quedan como faltantes; no penalizan el índice.</p><div className="form" style={{marginTop:18px}}>{['Edad','Peso (kg)','Cintura (cm)','HbA1c (%)','LDL (mg/dL)','TG (mg/dL)','AST (U/L)','ALT (U/L)','Presión arterial'].map(x=><div className="field" key={x}><label>{x}</label><input placeholder="Ingresar"/></div>)}</div><div style={{marginTop:18}}><button className="primary" onClick={()=>setTab('dashboard')}>Guardar consulta y calcular VLI</button></div></div></div>}
 
-  <div className="vli-tools">
-   <Button variant="ghost" className={state.rotate?'active':''} onClick={rotateSelected} disabled={!chosen}>{state.rotate?<Pause size={18}/>:<RotateCw size={18}/>}<span>{state.rotate?'Pausar':'Rotar órgano'}</span></Button>
-   <Button variant="ghost" onClick={()=>setState(s=>({...s,isolate:true,rotate:false,reset:s.reset+1}))} disabled={!chosen}><Focus size={18}/><span>Aislar</span></Button>
-   <Button variant="ghost" onClick={showBody}><span style={{fontSize:19}}>◎</span><span>Cuerpo</span></Button>
-   <Button variant="ghost" onClick={reset}><RotateCcw size={18}/><span>Reset</span></Button>
+    {tab==='twin'&&<div className="panel grid two"><div className="card twinbox"><div className="twinplaceholder"><Activity size={30}/><div>El módulo 3D premium se integrará aquí sin bloquear la aplicación.</div></div></div><div className="card"><div className="muted">GEMELO CLÍNICO</div><h2>Estado actual → objetivo</h2><p style={{color:'#96b7c1'}}>La app ya reserva este módulo para el futuro gemelo anatómico premium. Los datos clínicos, relojes y estados estarán listos para alimentarlo cuando incorporemos un modelo 3D de mayor calidad.</p><div className="row"><HeartPulse size={18}/><strong>Corazón 68 → 88</strong></div><div className="row"><Activity size={18}/><strong>Metabolismo 58 → 88</strong></div><div className="row"><Brain size={18}/><strong>Cerebro 72 → 87</strong></div></div></div>}
+
+    {tab==='reports'&&<div className="panel card empty"><FileText size={36}/><h2>Pasaporte de Longevidad VLI™</h2><p>Desde aquí se generará el informe para paciente con VLI global, relojes, hallazgos, objetivos y evolución longitudinal.</p><button className="primary">Generar informe demo</button></div>}
+
+    <p className="muted" style={{marginTop:24}}>*Puntajes y edades biológicas mostrados en esta demo son ilustrativos. VLI™ requiere definición metodológica y validación científica antes de presentarse como índice clínico validado.</p>
+   </section>
   </div>
-
-  <div className="vli-status">{(['front','three-quarter','side','back'] as View[]).map((v,i)=><Button key={v} variant="ghost" className={state.view===v?'active':''} onClick={()=>setState(s=>({...s,view:v,reset:s.reset+1,rotate:false}))}>{['Anterior','¾','Lateral','Posterior'][i]}</Button>)}</div>
-
-  {progress<100&&!error&&<div className="loading glass" role="status"><Activity size={18}/><div><strong>Preparando gemelo VLI™</strong><span>{progress}%</span><div className="loading-track"><i style={{width:`${progress}%`}}/></div></div></div>}
-  {error&&<div className="loading glass error"><p>{error}</p><Button variant="ghost" onClick={()=>location.reload()}>Recargar</Button></div>}
-
-  <Sheet open={details&&selectedParts.length>0} modal={false} disablePointerDismissal onOpenChange={setDetails}>
-   <SheetContent initialFocus={detailTitle} className={`detail-sheet glass ${state.isolate?'is-isolated':''}`} showCloseButton={true}>
-    <div className="detail-header"><div className="detail-accent" style={{background:isLiver?accent:system?.color,boxShadow:isLiver?`0 0 28px ${accent}`:undefined}}/><div className="eyebrow">{isLiver?'VLI™ · RELOJ HEPÁTICO':system?.name??'ANATOMÍA'}</div><SheetTitle ref={detailTitle} tabIndex={-1} className="structure-title">{isLiver?'Hígado':chosen?.name}</SheetTitle>{isLiver&&<div style={{fontSize:12,color:'#9dc7d6'}}>Centro metabólico de tu salud</div>}</div>
-    <div className="detail-scroll">
-     {isLiver?<>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,margin:'0 0 14px'}}><Button onClick={()=>setMode('actual')} variant={mode==='actual'?'default':'ghost'} style={{background:mode==='actual'?'#b95511':undefined}}>ESTADO ACTUAL</Button><Button onClick={()=>setMode('target')} variant={mode==='target'?'default':'ghost'} style={{background:mode==='target'?'#158f62':undefined}}>ESTADO OBJETIVO</Button></div>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}><div style={{border:`1px solid ${accent}55`,borderRadius:16,padding:14,background:`${accent}0d`}}><div style={{fontSize:11,opacity:.7}}>Puntaje VLI Hepático</div><div style={{fontSize:42,fontWeight:900,color:accent,textShadow:`0 0 22px ${accent}55`}}>{score}<span style={{fontSize:15,opacity:.6}}>/100</span></div></div><div style={{border:'1px solid rgba(255,255,255,.1)',borderRadius:16,padding:14,background:'rgba(255,255,255,.03)'}}><div style={{fontSize:11,opacity:.7}}>Edad biológica hepática*</div><div style={{fontSize:27,fontWeight:850,color:accent}}>{age}<span style={{fontSize:14}}> años</span></div></div></div>
-      <div style={{marginTop:14,padding:12,borderRadius:14,background:'rgba(255,255,255,.035)',border:'1px solid rgba(255,255,255,.07)'}}><div className="eyebrow">{mode==='actual'?'HALLAZGOS ACTUALES':'OBJETIVOS VLI'}</div><div style={{display:'grid',gap:7,marginTop:9}}>{(mode==='actual'?liverVli.findings:liverVli.goals).map(item=><div key={item} style={{display:'flex',gap:8,fontSize:13}}><span style={{color:accent}}>●</span><span>{item}</span></div>)}</div></div>
-      <div style={{marginTop:14,padding:12,borderRadius:14,border:`1px solid ${accent}55`,background:`${accent}10`}}><div style={{fontSize:11,letterSpacing:'.1em',fontWeight:800,color:accent}}>{mode==='actual'?'ESTADO ACTUAL':'ESTADO OBJETIVO'}</div><div style={{marginTop:5,fontWeight:800}}>{mode==='actual'?liverVli.status:'Perfil hepático-metabólico mejorado'}</div><div style={{marginTop:4,fontSize:12,opacity:.72}}>Actual {liverVli.current}/100 → Objetivo {liverVli.target}/100</div></div>
-      <p className="context-note" style={{marginTop:14}}>*Puntajes y edades de esta demo son ilustrativos. VLI™ requiere definición y validación científica antes de utilizarse como índice clínico validado.</p>
-     </>:<><SheetDescription className="structure-description">{chosen&&selected?explanation(chosen.name,selected.system):''}</SheetDescription><p className="context-note">Este órgano ya puede tocarse, aislarse y rotarse en 360°. Su reloj clínico VLI se añadirá progresivamente.</p></>}
-    </div>
-    <div className="detail-actions"><Button className="primary-action" onClick={rotateSelected}>{state.isolate&&state.rotate?<Pause size={18}/>:<RotateCw size={18}/>} {state.isolate&&state.rotate?'Pausar rotación':'Aislar y rotar 360°'}</Button><Button variant="ghost" className="secondary-action" onClick={showBody}>Volver al cuerpo holográfico</Button></div>
-   </SheetContent>
-  </Sheet>
- </main>;
+ </main>
 }
