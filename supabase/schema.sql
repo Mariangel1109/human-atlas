@@ -20,8 +20,15 @@ create table if not exists public.consultations (
   systolic_bp numeric,
   diastolic_bp numeric,
   notes text,
-  vli_global numeric
+  vli_global numeric,
+  vli_completeness numeric,
+  vli_version text,
+  vli_components jsonb
 );
+
+alter table public.consultations add column if not exists vli_completeness numeric;
+alter table public.consultations add column if not exists vli_version text;
+alter table public.consultations add column if not exists vli_components jsonb;
 
 create index if not exists consultations_patient_id_created_at_idx
   on public.consultations(patient_id, created_at desc);
