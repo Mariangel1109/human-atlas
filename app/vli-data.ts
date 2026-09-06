@@ -1,4 +1,5 @@
 import {calculateVli,type OrganResult} from './vli-core';
+import {downloadVliPassport} from './vli-passport';
 
 export type VliPatient={id:string;sex?:string;birth_date?:string;created_at?:string};
 export type VliConsultation={id?:string;patient_id:string;created_at?:string;age?:number;weight?:number;waist?:number;hba1c?:number;ldl?:number;triglycerides?:number;ast?:number;alt?:number;systolic_bp?:number;diastolic_bp?:number;notes?:string;vli_global?:number|null;vli_completeness?:number|null;vli_version?:string|null;vli_components?:Record<string,OrganResult>|null};
@@ -37,4 +38,25 @@ export async function createConsultation(c:VliConsultation):Promise<VliConsultat
  const calculated=withVli(c);
  if(hasSupabase){const r=await fetch(`${url}/rest/v1/consultations`,{method:'POST',headers:headers(),body:JSON.stringify(calculated)});if(r.ok){const rows=await r.json();return rows[0]??calculated;}throw new Error('No se pudo guardar la consulta en Supabase.');}
  const rows=readLocal<VliConsultation[]>(localConsultsKey,[]);const saved={...calculated,id:calculated.id??crypto.randomUUID(),created_at:new Date().toISOString()};writeLocal(localConsultsKey,[saved,...rows]);return saved;
+}
+
+function wirePassportButton(){
+ if(typeof document==='undefined')return;
+ const buttons=[...document.querySelectorAll('button')];
+ const button=buttons.find(b=>b.textContent?.includes('Generación PDF')) as HTMLButtonElement|undefined;
+ if(!button||button.dataset.vliPassport==='1')return;
+ button.dataset.vliPassport='1';button.disabled=false;button.textContent='Descargar Pasaporte VLI en PDF';
+ button.onclick=async()=>{
+   const patientId=(document.querySelector('.search select') as HTMLSelectElement|undefined)?.value;
+   if(!patientId){button.textContent='Selecciona un paciente';return;}
+   const rows=await listConsultations(patientId);const consultation=rows[0];
+   if(!consultation){button.textContent='Primero registra una consulta';return;}
+   const result=calculateVli(consultation);button.textContent='Generando PDF…';button.disabled=true;
+   try{await downloadVliPassport({patientId,consultation,organs:result.organs,global:result.global,completeness:result.completeness,version:result.version});button.textContent='Descargar Pasaporte VLI en PDF';}
+   finally{button.disabled=false;}
+ };
+}
+if(typeof window!=='undefined'){
+ queueMicrotask(wirePassportButton);
+ const observer=new MutationObserver(wirePassportButton);observer.observe(document.documentElement,{childList:true,subtree:true});
 }
