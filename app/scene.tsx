@@ -1,1 +1,1 @@
-export {default} from './scene-v2';
+export {default} from './scene-v3';
